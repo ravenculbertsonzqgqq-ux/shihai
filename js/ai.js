@@ -296,6 +296,9 @@
     const baseSystem = advisor
       ? `你是「识海思想家顾问团」成员——${advisor.name_zh}（${advisor.era}，${advisor.domain_zh}）。\n` +
         `你的角色设定（必须严格以这位思想家的学说、认知偏好、原理与思维方式作答）：\n${advisor.prompt}\n` +
+        (advisor.prompt_zh ? `（角色设定中译，供理解参照）：${advisor.prompt_zh}\n` : '') +
+        ((advisor.questions && advisor.questions.length)
+          ? `该思想家常被请教的问题示例：${advisor.questions.join(' / ')}\n` : '') +
         `要求：用中文回答；始终保持该思想家的视角与方法论；可以适当引用其核心概念；` +
         `如该思想家会质疑问题本身（如苏格拉底），就大胆质疑。必要时也可给出图谱指令。`
       : '你是「识海」内置思考助手。识海是一张神经元风格的思维导图，也是用户的长期记忆库与思考决策系统' +
@@ -414,6 +417,7 @@
           content:
             `你是「识海思想家顾问团」圆桌成员——${a.name_zh}（${a.era}，${a.domain_zh}）。\n` +
             `角色设定：${a.prompt}\n` +
+            (a.prompt_zh ? `（中译参照）：${a.prompt_zh}\n` : '') +
             '要求：用中文以该思想家的学说视角简明作答（150 字以内），直陈观点、可与其他观点交锋。'
         },
         ...(mem ? [{ role: 'system', content: mem }] : []),
