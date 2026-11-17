@@ -531,3 +531,126 @@ details.deep-d[open] summary, details.deep-c[open] summary { color: var(--text);
   background: rgba(110, 168, 255, 0.1);
 }
 .rt-name { color: var(--gold); font-size: 11.5px; letter-spacing: 1px; }
+
+/* ============================================================
+   v5 组件：图片节点 / 附图 / 生图 / 模型 IO
+   ============================================================ */
+
+/* ---------- 图片节点 ---------- */
+.node.has-img {
+  white-space: normal; padding: 7px 9px 9px; max-width: 92vw;
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+}
+.node.has-img .title {
+  max-width: none; text-align: center; font-size: 11.5px; color: var(--dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.node-img {
+  display: block; border-radius: 9px; pointer-events: none;
+  height: auto; max-height: 320px; object-fit: cover;
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+}
+.img-resize {
+  position: absolute; right: -7px; bottom: -7px; width: 16px; height: 16px;
+  border-radius: 5px; cursor: nwse-resize; z-index: 8;
+  background: linear-gradient(135deg, rgba(110, 168, 255, 0.25), rgba(110, 168, 255, 0.85));
+  border: 1px solid rgba(160, 200, 255, 0.8);
+}
+.img-resize:hover { transform: scale(1.15); }
+
+/* ---------- 📎 随聊附图 ---------- */
+#img-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.img-chip {
+  position: relative; display: inline-flex; border-radius: 8px; overflow: hidden;
+  border: 1px solid rgba(110, 168, 255, 0.4);
+}
+.img-chip img { width: 44px; height: 44px; object-fit: cover; display: block; }
+.img-chip-x {
+  position: absolute; top: 1px; right: 3px; font-size: 10px; color: #fff;
+  background: rgba(0, 0, 0, 0.55); border-radius: 8px; padding: 0 4px; cursor: pointer;
+}
+.img-chip-x:hover { background: rgba(220, 60, 60, 0.85); }
+
+/* ---------- 回答存为节点 ---------- */
+.to-node-btn {
+  display: block; margin: 8px auto 2px; padding: 3px 12px;
+  font-size: 10.5px; border-radius: 12px; cursor: pointer;
+  color: var(--accent); background: rgba(110, 168, 255, 0.1);
+  border: 1px solid rgba(110, 168, 255, 0.35); transition: all 0.15s;
+}
+.to-node-btn:hover { background: rgba(110, 168, 255, 0.25); transform: translateY(-1px); }
+
+/* ---------- 🎨 生图弹窗 ---------- */
+#gen-modal, #io-modal {
+  position: fixed; z-index: 70; top: 50%; left: 50%;
+  transform: translate(-50%, -48%) scale(0.96);
+  width: 520px; max-width: 92vw; max-height: 86vh; overflow-y: auto;
+  background: rgba(15, 22, 52, 0.97); border: 1px solid rgba(110, 150, 255, 0.28);
+  border-radius: 18px; padding: 22px;
+  opacity: 0; pointer-events: none;
+  transition: all 0.25s;
+  box-shadow: 0 30px 80px rgba(0, 4, 24, 0.7);
+}
+#gen-modal.show, #io-modal.show {
+  opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1);
+}
+#gen-modal h2, #io-modal h2 { font-size: 16px; letter-spacing: 1px; margin-bottom: 4px; }
+#gen-modal .sub, #io-modal .sub { font-size: 11px; color: var(--dim); margin-bottom: 12px; line-height: 1.6; }
+#gen-prompt {
+  width: 100%; padding: 9px 11px; border-radius: 9px; resize: vertical;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05);
+  color: var(--text); font-size: 12.5px; outline: none; font-family: inherit;
+}
+#gen-prompt:focus { border-color: var(--accent); }
+.gen-row { display: flex; gap: 14px; }
+.gen-ref { flex: 1.1; }
+.gen-cfg { flex: 1; }
+.gen-cfg input, .gen-cfg select {
+  width: 100%; padding: 8px 10px; border-radius: 9px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05);
+  color: var(--text); font-size: 12px; outline: none;
+}
+.gen-ref-box {
+  display: flex; gap: 6px; align-items: center;
+  padding: 8px; border: 1px dashed rgba(110, 150, 255, 0.35);
+  border-radius: 10px; min-height: 72px;
+}
+.gen-ref-box img {
+  width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
+  border: 1px solid var(--line);
+}
+#gen-ref-empty { flex: 1; text-align: center; font-size: 10.5px; color: var(--dim); line-height: 1.5; }
+#gen-error {
+  margin-top: 12px; padding: 9px 11px; border-radius: 9px;
+  background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fca5a5; font-size: 11px; line-height: 1.6; word-break: break-all;
+}
+
+/* ---------- 🧾 模型 IO 日志 ---------- */
+.io-card {
+  border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px;
+  margin-bottom: 10px; background: rgba(255, 255, 255, 0.03);
+}
+.io-card.io-err { border-color: rgba(248, 113, 113, 0.4); }
+.io-head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  font-size: 11px; color: var(--dim);
+}
+.io-head b { color: var(--text); font-size: 11.5px; }
+.io-model {
+  padding: 1px 8px; border-radius: 10px; font-size: 10px;
+  background: rgba(110, 168, 255, 0.12); color: var(--accent);
+}
+.io-time { margin-left: auto; white-space: nowrap; }
+.io-body { margin: 4px 0; }
+.io-body summary {
+  cursor: pointer; font-size: 10.5px; color: var(--dim); user-select: none;
+}
+.io-body[open] summary { color: var(--text); margin-bottom: 5px; }
+.io-pre {
+  white-space: pre-wrap; word-break: break-word;
+  font-size: 10.5px; line-height: 1.65; color: var(--dim);
+  max-height: 220px; overflow-y: auto;
+  background: rgba(0, 0, 0, 0.22); border-radius: 8px; padding: 8px 10px;
+}

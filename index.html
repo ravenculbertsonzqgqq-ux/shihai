@@ -49,6 +49,10 @@
   </div>
   <div class="tb-sep"></div>
   <div class="tb-group">
+    <button class="btn" id="btn-image" title="上传图片到画布（也可直接拖入/粘贴）">🖼</button>
+    <button class="btn" id="btn-gen" title="AI 生图：提示词+参考图 → 图片节点">🎨</button>
+    <button class="btn" id="btn-io" title="模型输入/输出日志">🧾</button>
+    <input type="file" id="file-image" accept="image/*" multiple hidden>
     <button class="btn" id="btn-export" title="导出 JSON (Ctrl+S)">⬇</button>
     <button class="btn" id="btn-import" title="导入 JSON">⬆</button>
     <input type="file" id="file-import" accept=".json,application/json" hidden>
@@ -127,10 +131,14 @@
   </div>
   <div class="ai-input-row">
     <textarea id="ai-input" placeholder="提问或指挥我改图…（Enter 发送）"></textarea>
+    <button class="btn" id="btn-attach-sel" title="附加选中图片节点给 AI 看">🖼选中</button>
+    <button class="btn" id="btn-attach" title="附加本地图片给 AI 看（多模态输入）">📎</button>
+    <input type="file" id="file-attach" accept="image/*" multiple hidden>
     <label class="deep-wrap" title="深度反思：初稿→批评→修订（Reflexion 三轮）"><input type="checkbox" id="deep-toggle">🔬深度</label>
     <button class="btn primary" id="ai-send">发送</button>
   </div>
-  <div class="ai-tip">回车发送 · shihai 指令自动改图 · 🔬深度=三轮反思 · 🪑圆桌=多顾问会诊</div>
+  <div id="img-chips"></div>
+  <div class="ai-tip">回车发送 · shihai 指令自动改图 · 📎附图让 AI 看图 · 🔬深度=三轮反思 · 🪑圆桌=多顾问会诊</div>
 </aside>
 
 <!-- ═════════ 图例 / 提示 ═════════ -->
@@ -211,6 +219,52 @@
   </div>
 </div>
 
+<!-- ═════════ AI 生图弹窗（v5） ═════════ -->
+<div id="gen-modal">
+  <h2>🎨 AI 生图 · 模型输入 → 输出入画布</h2>
+  <div class="sub">输入：提示词（可选参考图，走 /images/edits 编辑）→ 输出：图片直接落为画布节点。需配置支持 OpenAI 兼容生图接口（/images/generations）的 Key。</div>
+  <label style="display:block;font-size:11.5px;color:var(--dim);margin:10px 0 5px;">提示词 Prompt</label>
+  <textarea id="gen-prompt" rows="3" placeholder="例如：水墨风格的神经元网络，深蓝背景，发光突触……"></textarea>
+  <div class="gen-row">
+    <div class="gen-ref">
+      <label style="display:block;font-size:11.5px;color:var(--dim);margin:10px 0 5px;">参考图（可选）</label>
+      <div class="gen-ref-box">
+        <img id="gen-ref-img" style="display:none">
+        <div id="gen-ref-empty">无<br><small>选中图片节点后打开本面板会自动带入</small></div>
+        <button class="btn" id="gen-ref-pick" title="上传参考图">＋</button>
+        <button class="btn" id="gen-ref-clear" title="清除参考图">✕</button>
+        <input type="file" id="gen-ref-file" accept="image/*" hidden>
+      </div>
+    </div>
+    <div class="gen-cfg">
+      <label style="display:block;font-size:11.5px;color:var(--dim);margin:10px 0 5px;">生图模型</label>
+      <input id="gen-model" type="text" placeholder="gpt-image-1">
+      <label style="display:block;font-size:11.5px;color:var(--dim);margin:10px 0 5px;">尺寸</label>
+      <select id="gen-size">
+        <option value="1024x1024">1024×1024 方形</option>
+        <option value="1536x1024">1536×1024 横幅</option>
+        <option value="1024x1536">1024×1536 竖幅</option>
+      </select>
+    </div>
+  </div>
+  <div id="gen-error" style="display:none"></div>
+  <div class="modal-row">
+    <button class="btn" id="gen-close">取消</button>
+    <button class="btn primary" id="gen-run">⚡ 开始生成</button>
+  </div>
+</div>
+
+<!-- ═════════ 模型输入/输出日志弹窗（v5） ═════════ -->
+<div id="io-modal">
+  <h2>🧾 模型输入 / 输出日志</h2>
+  <div class="sub">每一次模型调用（对话/生图）的完整输入、输出、耗时与 token 用量——像无限画布工作台一样透明可查。</div>
+  <div id="io-list"></div>
+  <div class="modal-row">
+    <button class="btn" id="io-refresh">刷新</button>
+    <button class="btn primary" id="io-close">关闭</button>
+  </div>
+</div>
+
 <!-- ═════════ 脚本 ═════════ -->
 <script src="js/data.js"></script>
 <script src="js/data-extra.js"></script>
@@ -220,5 +274,7 @@
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
 <script src="js/upgrades.js"></script>
+<script src="js/interact.js"></script>
+<script src="js/media.js"></script>
 </body>
 </html>

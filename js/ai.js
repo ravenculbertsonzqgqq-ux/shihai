@@ -38,6 +38,15 @@
       messages
     };
     if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+    const t0 = Date.now();
+    const ioLog = (window.__shihaiIOLog = window.__shihaiIOLog || []);
+    const ioEntry = { t: t0, kind: 'chat', model: body.model, messages, reply: '', usage: null, ms: 0, error: '' };
+    const pushIO = () => {
+      ioEntry.ms = Date.now() - t0;
+      ioLog.push(ioEntry);
+      if (ioLog.length > 30) ioLog.shift();
+      if (window.__shihaiIOUpdate) window.__shihaiIOUpdate();
+    };
     let res;
     try {
       res = await fetch(url, {
@@ -49,15 +58,22 @@
         body: JSON.stringify(body)
       });
     } catch (e) {
+      ioEntry.error = '网络/CORS 错误：' + e.message;
+      pushIO();
       throw new Error('网络/CORS 错误：' + e.message + '（请检查端点是否支持浏览器跨域）');
     }
     if (!res.ok) {
       const t = await res.text().catch(() => '');
+      ioEntry.error = 'HTTP ' + res.status + '：' + t.slice(0, 180);
+      pushIO();
       throw new Error('API 错误 HTTP ' + res.status + '：' + t.slice(0, 180));
     }
     const data = await res.json();
     const content = data && data.choices && data.choices[0] && data.choices[0].message
       ? data.choices[0].message.content : '';
+    ioEntry.reply = (content || '').trim();
+    ioEntry.usage = data && data.usage ? data.usage : null;
+    pushIO();
     return (content || '').trim();
   }
 
@@ -299,7 +315,16 @@
       });
     }
     chatLog.slice(-10).forEach((m) => msgs.push(m));
-    msgs.push({ role: 'user', content: userText });
+    // 图片输入（多模态）：若 AI 输入区附加了图片，组装为 image_url 内容块
+    const chatImgs = (window.__shihaiChatImages || []).slice();
+    window.__shihaiChatImages = [];
+    if (chatImgs.length) {
+      const parts = [{ type: 'text', text: userText }];
+      chatImgs.forEach((u) => parts.push({ type: 'image_url', image_url: { url: u } }));
+      msgs.push({ role: 'user', content: parts });
+    } else {
+      msgs.push({ role: 'user', content: userText });
+    }
 
     const reply = await callChat(msgs, { temperature: 0.7, maxTokens: 1200 });
     chatLog.push({ role: 'user', content: userText });
