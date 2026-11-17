@@ -1,22 +1,28 @@
 /* ============================================================
-   识海 · ShiHai —— 无限画布思维导图核心引擎
-   神经元风格 | 自由编辑 | 布局 | 持久化 | AI 集成入口
+   识海 · ShiHai —— 无限画布思维导图核心引擎 v2
+   画布 / 布局 / 编辑 / 持久化 / 历史快照回滚 / AI 操控接口
    ============================================================ */
 (function () {
   'use strict';
 
-  const LS_MAP = 'shihai.map.v1';
-  const VGAP = 12;   // 节点间垂直间隙
-  const RH = 38;     // 节点行高
-  const HGAP = 80;   // 层级水平间隙
+  const LS_MAP = 'shihai.map.v2';
+  const LS_SNAPS = 'shihai.snapshots.v1';
+  const LS_HIST = 'shihai.history.v1';
+  const VGAP = 12, RH = 38, HGAP = 80;
+  const UNDO_MAX = 30, SNAP_MAX = 12;
 
   // ---------- 状态 ----------
-  let nodes = {};            // id -> node
+  let nodes = {};
   let rootId = 'root';
-  let order = [];            // DFS 序
+  let order = [];
   let selId = null;
   let view = { x: 0, y: 0, s: 1 };
   let idSeq = 0;
+
+  // ---------- 历史 ----------
+  let undoStack = [];   // [{label, time, state}]
+  let redoStack = [];
+  let snapshots = [];   // [{id, name, time, count, state}]
 
   // ---------- DOM ----------
   const $ = (s) => document.querySelector(s);
@@ -61,8 +67,34 @@
     };
   }
 
+  function cloneState() { return JSON.stringify(toNested(rootId)); }
+
+  /* ---------- 扩展层合并（迭代延伸内容） ---------- */
+  function applyExtensions(nested) {
+    const exts = window.SHIHAI_EXTENSIONS || [];
+    if (!exts.length) return nested;
+    const byId = {};
+    (function idx(n) { byId[n.id] = n; (n.children || []).forEach(idx); })(nested);
+    for (const e of exts) {
+      const p = byId[e.parent];
+      if (!p) continue;
+      p.children = p.children || [];
+      for (const c of (e.children || [])) {
+        p.children.push(c);
+        (function idx(n) { if (n.id) byId[n.id] = n; (n.children || []).forEach(idx); })(c);
+      }
+    }
+    return nested;
+  }
+
+  function freshDefault() {
+    // 深拷贝默认图谱并合并扩展层，避免污染源数据
+    const base = JSON.parse(JSON.stringify(window.SHIHAI_DEFAULT_MAP));
+    return applyExtensions(base);
+  }
+
   // ============================================================
-  //  布局（左右双侧整齐树 —— 如大脑左右半球）
+  //  布局（左右双侧整齐树 —— 大脑左右半球）
   // ============================================================
   function sizeOf(n) {
     let w = 30;
@@ -156,9 +188,10 @@
       badge.className = 'collapse-badge';
       badge.title = '折叠 / 展开';
       badge.textContent = n.collapsed ? '＋' + countSub(n.id) : '－';
-      badge.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+      badge.addEventListener('pointerdown', (e) => e.stopPropagation());
       badge.addEventListener('click', (e) => {
         e.stopPropagation();
+        pushHistory((n.collapsed ? '展开: ' : '折叠: ') + n.text);
         n.collapsed = !n.collapsed;
         render(); save();
       });
@@ -188,8 +221,7 @@
   }
 
   function countSub(id) {
-    const n = nodes[id];
-    return n.children.reduce((s, c) => s + 1 + countSub(c), 0);
+    return nodes[id].children.reduce((s, c) => s + 1 + countSub(c), 0);
   }
 
   function renderEdges() {
@@ -208,7 +240,6 @@
       html += `<path class="edge" d="${d}"/>`;
       html += `<path class="edge-flow" d="${d}"/>`;
     }
-    // 联想连接（虚线跨枝连接 —— 神经元横向突触）
     for (const id of order) {
       const n = nodes[id];
       if (!n.link || !nodes[n.link] || !isVisible(id) || !isVisible(n.link)) continue;
@@ -220,7 +251,7 @@
   }
 
   // ============================================================
-  //  视图（平移 / 缩放 / 网格）
+  //  视图
   // ============================================================
   function applyView() {
     world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
@@ -269,12 +300,12 @@
   }
 
   // ============================================================
-  //  编辑操作
+  //  编辑操作（全部走 pushHistory 以便回滚）
   // ============================================================
   function makeNode(text, parentId) {
     const id = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     nodes[id] = {
-      id, text: text || '新节点', note: '',
+      id, text: String(text || '新节点'), note: '',
       color: nodes[parentId] ? nodes[parentId].color : 'cog',
       x: 0, y: 0, parent: parentId, children: [], collapsed: false, link: null
     };
@@ -284,12 +315,11 @@
   }
 
   function placeNear(id) {
-    // 增量摆放：不打扰用户已拖动过的其他节点
     const n = nodes[id], p = nodes[n.parent];
     if (!p) return;
     const idx = p.children.indexOf(id);
     const ps = sizeOf(p), cs = sizeOf(n);
-    const dir = p.x >= (nodes[rootId].x) ? 1 : (p.x < nodes[rootId].x ? -1 : 1);
+    const dir = p.x >= nodes[rootId].x ? 1 : -1;
     n.x = p.x + dir * ((ps.w + cs.w) / 2 + HGAP);
     const sib = p.children[idx - 1];
     n.y = sib ? nodes[sib].y + RH + VGAP : p.y + (idx + 1) * (RH + VGAP);
@@ -297,7 +327,9 @@
 
   function addChild(pid) {
     const p = nodes[pid];
-    if (p.collapsed) { p.collapsed = false; }
+    if (!p) return;
+    pushHistory('添加子节点 → ' + p.text);
+    if (p.collapsed) p.collapsed = false;
     const id = makeNode('新节点', pid);
     placeNear(id);
     render(); save();
@@ -307,7 +339,9 @@
 
   function addSibling(id) {
     const n = nodes[id];
+    if (!n) return;
     if (!n.parent) return addChild(id);
+    pushHistory('添加同级 → ' + n.text);
     const nid = makeNode('新节点', n.parent);
     const arr = nodes[n.parent].children;
     arr.splice(arr.indexOf(nid), 1);
@@ -321,16 +355,26 @@
   function delNode(id) {
     if (id === rootId) return toast('根节点不能删除');
     const n = nodes[id];
+    if (!n) return;
     if (countSub(id) > 0 && !confirm('删除该节点及其 ' + countSub(id) + ' 个后代？')) return;
+    deleteById(id, '删除: ' + n.text);
+  }
+
+  function deleteById(id, label) {
+    if (id === rootId || !nodes[id]) return false;
+    const n = nodes[id];
+    pushHistory(label || ('删除: ' + n.text));
     (function rm(i) {
       nodes[i].children.slice().forEach(rm);
       delete nodes[i];
       order = order.filter((x) => x !== i);
     })(id);
     const arr = nodes[n.parent].children;
-    arr.splice(arr.indexOf(id), 1);
-    selId = null;
+    const idx = arr.indexOf(id);
+    if (idx >= 0) arr.splice(idx, 1);
+    if (selId === id) selId = null;
     render(); save();
+    return true;
   }
 
   function startEdit(id) {
@@ -348,8 +392,10 @@
       el.classList.remove('editing');
       el.removeEventListener('blur', onBlur);
       el.removeEventListener('keydown', onKey);
-      if (ok) {
-        nodes[id].text = el.textContent.trim() || '未命名';
+      const val = el.textContent.trim() || '未命名';
+      if (ok && val !== nodes[id].text) {
+        pushHistory('改名: ' + nodes[id].text);
+        nodes[id].text = val;
         save();
       }
       render();
@@ -376,82 +422,168 @@
     });
   }
 
-  // ============================================================
-  //  交互：平移 / 拖节点 / 缩放
-  // ============================================================
-  let drag = null; // {mode:'pan'|'node', ...}
+  /* ---------- AI/外部操控接口 ---------- */
+  function renameNode(id, text) {
+    if (!nodes[id]) return false;
+    pushHistory('AI 改名: ' + nodes[id].text);
+    nodes[id].text = String(text || '未命名');
+    render(); save();
+    return true;
+  }
 
-  viewport.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 && e.button !== 1) return;
-    const nodeEl = e.target.closest('.node');
-    const editing = e.target.closest('.title[contenteditable="true"]');
-    if (editing) return;
-    if (nodeEl && e.button === 0) {
-      const id = nodeEl.dataset.id;
-      selectNode(id);
-      const n = nodes[id];
-      drag = { mode: 'node', id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false };
-      nodeEl.classList.add('dragging');
-    } else {
-      drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y };
-      viewport.classList.add('panning');
+  function setNote(id, text) {
+    if (!nodes[id]) return false;
+    pushHistory('AI 备注: ' + nodes[id].text);
+    nodes[id].note = String(text || '');
+    render(); save();
+    return true;
+  }
+
+  function setColor(id, color) {
+    if (!nodes[id]) return false;
+    pushHistory('AI 上色: ' + nodes[id].text);
+    nodes[id].color = color;
+    render(); save();
+    return true;
+  }
+
+  function addLink(fromId, toId) {
+    if (!nodes[fromId] || !nodes[toId]) return false;
+    pushHistory('AI 联想: ' + nodes[fromId].text);
+    nodes[fromId].link = toId;
+    render(); save();
+    return true;
+  }
+
+  function setCollapsed(id, collapsed) {
+    if (!nodes[id]) return false;
+    nodes[id].collapsed = !!collapsed;
+    render(); save();
+    return true;
+  }
+
+  function findNode(ref) {
+    if (!ref) return null;
+    ref = String(ref).trim();
+    if (nodes[ref]) return nodes[ref];
+    const low = ref.toLowerCase();
+    // 精确标题 → 标题包含 → 路径包含
+    let hit = order.map((i) => nodes[i]).find((n) => n.text === ref);
+    if (hit) return hit;
+    hit = order.map((i) => nodes[i]).find((n) => n.text.toLowerCase().includes(low));
+    if (hit) return hit;
+    hit = order.map((i) => nodes[i]).find((n) => n.note && n.note.toLowerCase().includes(low));
+    return hit || null;
+  }
+
+  function expandAll() {
+    order.forEach((id) => { nodes[id].collapsed = false; });
+    render(); save();
+  }
+
+  // ============================================================
+  //  历史快照 / 回滚
+  // ============================================================
+  function pushHistory(label) {
+    try {
+      undoStack.push({ label: label || '修改', time: Date.now(), state: cloneState() });
+      if (undoStack.length > UNDO_MAX) undoStack.shift();
+      redoStack = [];
+      persistHist();
+    } catch (e) { /* 内存异常忽略 */ }
+  }
+
+  function undo() {
+    if (!undoStack.length) { toast('没有可撤销的操作'); return false; }
+    const entry = undoStack.pop();
+    redoStack.push({ label: entry.label, time: Date.now(), state: cloneState() });
+    if (redoStack.length > UNDO_MAX) redoStack.shift();
+    applyState(entry.state);
+    toast('↩ 已撤销：' + entry.label);
+    persistHist();
+    return true;
+  }
+
+  function redo() {
+    if (!redoStack.length) { toast('没有可重做的操作'); return false; }
+    const entry = redoStack.pop();
+    undoStack.push({ label: entry.label, time: Date.now(), state: cloneState() });
+    applyState(entry.state);
+    toast('↪ 已重做：' + entry.label);
+    persistHist();
+    return true;
+  }
+
+  function applyState(stateStr) {
+    try {
+      const nested = JSON.parse(stateStr);
+      buildFromNested(nested);
+      render();
+      if (selId && nodes[selId]) selectNode(selId);
+      save();
+    } catch (e) { toast('状态恢复失败'); }
+  }
+
+  function saveSnapshot(name) {
+    const snap = {
+      id: 's' + Date.now().toString(36),
+      name: name || ('快照 ' + new Date().toLocaleString('zh-CN', { hour12: false })),
+      time: Date.now(),
+      count: order.length,
+      state: cloneState()
+    };
+    snapshots.unshift(snap);
+    if (snapshots.length > SNAP_MAX) snapshots.pop();
+    persistSnaps();
+    toast('📌 已保存快照：' + snap.name);
+    return snap;
+  }
+
+  function restoreSnapshot(id) {
+    const s = snapshots.find((x) => x.id === id);
+    if (!s) return false;
+    pushHistory('回滚前状态');
+    applyState(s.state);
+    toast('⏳ 已回滚到快照：' + s.name);
+    return true;
+  }
+
+  function deleteSnapshot(id) {
+    snapshots = snapshots.filter((x) => x.id !== id);
+    persistSnaps();
+  }
+
+  function persistSnaps() {
+    try {
+      localStorage.setItem(LS_SNAPS, JSON.stringify(snapshots));
+    } catch (e) {
+      // 空间不足：丢最旧的
+      while (snapshots.length > 2) {
+        snapshots.pop();
+        try { localStorage.setItem(LS_SNAPS, JSON.stringify(snapshots)); break; } catch (e2) { /* 继续丢 */ }
+      }
     }
-    viewport.setPointerCapture(e.pointerId);
-  });
+  }
 
-  viewport.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
-    if (drag.mode === 'pan') {
-      view.x = drag.ox + dx; view.y = drag.oy + dy;
-      applyView();
-    } else {
-      const n = nodes[drag.id];
-      n.x = drag.ox + dx / view.s;
-      n.y = drag.oy + dy / view.s;
-      drag.moved = true;
-      const el = nodeLayer.querySelector(`.node[data-id="${drag.id}"]`);
-      if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
-      renderEdges();
+  function persistHist() {
+    try {
+      localStorage.setItem(LS_HIST, JSON.stringify({
+        undo: undoStack.slice(-12), redo: redoStack.slice(-12)
+      }));
+    } catch (e) { /* 忽略 */ }
+  }
+
+  function loadHist() {
+    try {
+      const d = JSON.parse(localStorage.getItem(LS_HIST) || '{}');
+      undoStack = (d.undo || []).filter((x) => x && x.state);
+      redoStack = (d.redo || []).filter((x) => x && x.state);
+      snapshots = JSON.parse(localStorage.getItem(LS_SNAPS) || '[]')
+        .filter((x) => x && x.state);
+    } catch (e) {
+      undoStack = []; redoStack = []; snapshots = [];
     }
-  });
-
-  viewport.addEventListener('pointerup', (e) => {
-    if (drag && drag.mode === 'node' && drag.moved) save();
-    nodeLayer.querySelectorAll('.dragging').forEach((el) => el.classList.remove('dragging'));
-    viewport.classList.remove('panning');
-    drag = null;
-  });
-
-  viewport.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0012));
-  }, { passive: false });
-
-  viewport.addEventListener('dblclick', (e) => {
-    const nodeEl = e.target.closest('.node');
-    if (nodeEl) startEdit(nodeEl.dataset.id);
-    else if (e.target === viewport || e.target === world || e.target === nodeLayer) {
-      // 双击空白 = 快速建根级？不，建当前选中的子节点
-      if (selId) addChild(selId);
-    }
-  });
-
-  // ============================================================
-  //  键盘
-  // ============================================================
-  document.addEventListener('keydown', (e) => {
-    const typing = /INPUT|TEXTAREA/.test(e.target.tagName) || e.target.isContentEditable;
-    if (typing) return;
-    if (e.key === 'Tab' && selId) { e.preventDefault(); addChild(selId); }
-    else if (e.key === 'Enter' && selId) { e.preventDefault(); addSibling(selId); }
-    else if ((e.key === 'Delete' || e.key === 'Backspace') && selId) { e.preventDefault(); delNode(selId); }
-    else if (e.key === 'F2' && selId) { e.preventDefault(); startEdit(selId); }
-    else if (e.key === 'e' || e.key === 'E') fitView();
-    else if (e.key === '0') fitView();
-    else if (e.key === '+' || e.key === '=') zoomAt(innerWidth / 2, innerHeight / 2, 1.25);
-    else if (e.key === '-') zoomAt(innerWidth / 2, innerHeight / 2, 0.8);
-  });
+  }
 
   // ============================================================
   //  持久化 / 导入导出 / 重置
@@ -462,7 +594,7 @@
     saveTimer = setTimeout(() => {
       try {
         localStorage.setItem(LS_MAP, JSON.stringify({ root: toNested(rootId), view, selId }));
-      } catch (err) { /* 存储满等异常忽略 */ }
+      } catch (err) { /* 忽略 */ }
     }, 300);
   }
 
@@ -478,12 +610,12 @@
           return true;
         }
       }
-    } catch (err) { /* 损坏数据则回退默认 */ }
+    } catch (err) { /* 回退默认 */ }
     return false;
   }
 
   function exportJSON() {
-    const blob = new Blob([JSON.stringify({ app: 'shihai', version: 1, root: toNested(rootId) }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ app: 'shihai', version: 2, root: toNested(rootId) }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = '识海图谱-' + new Date().toISOString().slice(0, 10) + '.json';
@@ -498,6 +630,7 @@
         const d = JSON.parse(fr.result);
         const root = d.root || d;
         if (!root || !root.text) throw new Error('bad');
+        pushHistory('导入图谱');
         buildFromNested(root);
         layout(); render(); save(); fitView();
         toast('导入成功');
@@ -507,9 +640,10 @@
   }
 
   function resetMap() {
-    if (!confirm('重置为「北极星思考决策系统」默认图谱？当前修改将丢失。')) return;
+    if (!confirm('重置为默认图谱（北极星系统＋人类智慧结晶＋扩展层）？当前修改将进入历史可回滚。')) return;
+    pushHistory('重置前状态');
     localStorage.removeItem(LS_MAP);
-    buildFromNested(window.SHIHAI_DEFAULT_MAP);
+    buildFromNested(freshDefault());
     layout(); render(); save(); fitView();
     toast('已重置为默认图谱');
   }
@@ -543,7 +677,7 @@
   }
 
   // ============================================================
-  //  对外 API（AI 模块使用）
+  //  对外 API
   // ============================================================
   function apiCtx() {
     return {
@@ -559,6 +693,8 @@
       },
       addChildrenTo: (pid, texts) => {
         const p = nodes[pid];
+        if (!p) return [];
+        pushHistory('AI 扩展: ' + p.text);
         if (p.collapsed) p.collapsed = false;
         const ids = texts.map((t) => {
           const id = makeNode(String(t), pid);
@@ -568,7 +704,29 @@
         render(); save();
         return ids;
       },
-      render, save, toast, layout, fitView, centerOn, selectNode, view: () => view
+      renameNode, setNote, setColor, addLink, setCollapsed,
+      deleteById: (id) => deleteById(id),
+      findNode, expandAll, layout, render, save, toast,
+      fitView, centerOn, selectNode, view: () => view,
+      pushHistory, undo, redo,
+      saveSnapshot, restoreSnapshot, deleteSnapshot,
+      listSnapshots: () => snapshots,
+      histInfo: () => ({
+        undo: undoStack.map((x, i) => ({ i, label: x.label, time: x.time })),
+        redo: redoStack.map((x, i) => ({ i, label: x.label, time: x.time }))
+      }),
+      restoreUndoAt: (i) => {
+        // 回滚到历史栈第 i 条（0=最旧）
+        if (i < 0 || i >= undoStack.length) return false;
+        redoStack.push({ label: '回到历史点', time: Date.now(), state: cloneState() });
+        const entry = undoStack[i];
+        undoStack = undoStack.slice(0, i);
+        applyState(entry.state);
+        toast('⏳ 已回滚到：' + entry.label);
+        persistHist();
+        return true;
+      },
+      nodeCount: () => order.length
     };
   }
 
@@ -576,22 +734,21 @@
   //  启动
   // ============================================================
   function boot() {
+    loadHist();
     const restored = load();
-    if (!restored) buildFromNested(window.SHIHAI_DEFAULT_MAP);
+    if (!restored) buildFromNested(freshDefault());
     if (!restored || !view.s) layout();
     render();
     applyView();
-    if (restored && view.x === 0 && view.y === 0) fitView();
-    else if (!restored) fitView();
-    if (selId) selectNode(selId);
+    if (restored && (view.x !== 0 || view.y !== 0)) { /* 保留视角 */ }
+    else fitView();
+    if (selId && nodes[selId]) selectNode(selId);
   }
 
   window.ShihaiApp = Object.assign(apiCtx(), {
     exportJSON, importJSON, resetMap, search, boot, buildFromNested,
-    addChildrenTo: apiCtx().addChildrenTo,
-    nodeCount: () => order.length
+    addChildrenTo: apiCtx().addChildrenTo
   });
-  window.ShihaiApp.toast = toast;
 
   document.addEventListener('DOMContentLoaded', () => {
     boot();

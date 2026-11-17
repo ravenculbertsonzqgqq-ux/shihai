@@ -1,5 +1,5 @@
 /* ============================================================
-   识海 · UI 模块 —— 工具栏 / 侧栏 / 设置 / AI 面板
+   识海 · UI 模块 v2 —— 工具栏 / 面板 / 历史快照 / AI 交互
    ============================================================ */
 (function () {
   'use strict';
@@ -14,28 +14,27 @@
     west: '西方', book: '典籍'
   };
 
-  /* ---------------- 初始化 ---------------- */
   function init(app) {
     APP = app;
 
-    // 工具栏
-    $('#btn-add-child').onclick = () => APP.getSelId() ? addChildViaUI() : APP.toast('请先选中一个节点');
+    /* ---------- 工具栏 ---------- */
+    $('#btn-add-child').onclick = () => {
+      if (!APP.getSelId()) return APP.toast('请先选中一个节点');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    };
     $('#btn-add-sib').onclick = () => {
-      const id = APP.getSelId();
-      if (!id) return APP.toast('请先选中一个节点');
-      // 复用 app 内部逻辑：派发回车键等价操作
+      if (!APP.getSelId()) return APP.toast('请先选中一个节点');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     };
     $('#btn-edit').onclick = () => {
-      const id = APP.getSelId();
-      if (id) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+      if (APP.getSelId()) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
       else APP.toast('请先选中一个节点');
     };
     $('#btn-del').onclick = () => {
-      const id = APP.getSelId();
-      if (id) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      if (APP.getSelId()) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
     };
     $('#btn-layout').onclick = () => {
+      APP.pushHistory('整理布局');
       APP.layout(); APP.render(); APP.save(); APP.toast('已重新整理布局');
     };
     $('#btn-fit').onclick = () => APP.fitView();
@@ -47,16 +46,31 @@
     };
     $('#btn-reset').onclick = () => APP.resetMap();
     $('#btn-settings').onclick = openSettings;
-    $('#btn-ai').onclick = () => {
-      $('#ai-panel').classList.toggle('open');
-    };
+    $('#btn-ai').onclick = () => $('#ai-panel').classList.toggle('open');
 
-    // 搜索
+    /* ---------- 历史 / 快照 ---------- */
+    $('#btn-undo').onclick = () => { APP.undo(); refreshHistPanel(); };
+    $('#btn-redo').onclick = () => { APP.redo(); refreshHistPanel(); };
+    $('#btn-history').onclick = () => {
+      refreshHistPanel();
+      $('#modal-mask').classList.add('show');
+      $('#history-modal').classList.add('show');
+    };
+    $('#hist-close').onclick = closeModal;
+    $('#hist-save').onclick = () => {
+      const name = $('#hist-name').value.trim();
+      APP.saveSnapshot(name || undefined);
+      $('#hist-name').value = '';
+      refreshHistPanel();
+    };
+    $('#modal-mask').onclick = closeModal;
+
+    /* ---------- 搜索 ---------- */
     const searchBox = $('#search');
     let hits = [], hitIdx = 0;
     searchBox.addEventListener('input', () => {
       hits = APP.search(searchBox.value.trim());
-      $('#search-count').textContent = searchBox.value.trim() ? `${hits.length} 个结果` : '';
+      $('#search-count').textContent = searchBox.value.trim() ? `${hits.length} 结果` : '';
     });
     searchBox.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && hits.length) {
@@ -67,11 +81,11 @@
       }
     });
 
-    // 缩放按钮
+    /* ---------- 缩放 ---------- */
     $('#zoom-in').onclick = () => zoomBtn(1.3);
     $('#zoom-out').onclick = () => zoomBtn(0.77);
 
-    // 设置面板
+    /* ---------- 设置 ---------- */
     $('#set-save').onclick = () => {
       const s = {
         baseUrl: $('#set-url').value.trim() || window.ShihaiAI.DEFAULTS.baseUrl,
@@ -85,9 +99,8 @@
     };
     $('#set-default').onclick = () => fillSettings(window.ShihaiAI.DEFAULTS);
     $('#set-close').onclick = closeModal;
-    $('#modal-mask').onclick = closeModal;
 
-    // AI 面板
+    /* ---------- AI 面板 ---------- */
     $('#ai-expand').onclick = () => {
       const id = APP.getSelId();
       if (!id) return APP.toast('请先选中要扩展的节点');
@@ -98,30 +111,43 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
     });
 
-    // 节点信息面板
+    /* ---------- 节点信息面板 ---------- */
     $('#info-save').onclick = () => {
       const id = APP.getSelId();
       if (!id) return;
       const nodes = ctx().getNodes();
-      nodes[id].text = $('#info-text').value.trim() || '未命名';
-      nodes[id].note = $('#info-note').value.trim();
-      nodes[id].color = $('#info-color').value;
+      const t = $('#info-text').value.trim() || '未命名';
+      const n = $('#info-note').value.trim();
+      const c = $('#info-color').value;
+      if (t !== nodes[id].text) { APP.pushHistory('改名: ' + nodes[id].text); nodes[id].text = t; }
+      if (n !== nodes[id].note) { APP.pushHistory('改备注: ' + nodes[id].text); nodes[id].note = n; }
+      if (c !== nodes[id].color) { APP.pushHistory('改颜色: ' + nodes[id].text); nodes[id].color = c; }
       APP.render(); APP.save();
-      APP.toast('节点已保存');
+      APP.toast('节点已保存（可撤销）');
     };
+
+    /* ---------- 快捷键：撤销 / 重做 ---------- */
+    document.addEventListener('keydown', (e) => {
+      const typing = /INPUT|TEXTAREA/.test(e.target.tagName) || e.target.isContentEditable;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'z' && !typing) {
+        e.preventDefault();
+        if (e.shiftKey) APP.redo(); else APP.undo();
+        refreshHistPanel();
+      } else if (mod && e.key.toLowerCase() === 'y' && !typing) {
+        e.preventDefault(); APP.redo(); refreshHistPanel();
+      } else if (mod && e.key.toLowerCase() === 's') {
+        e.preventDefault(); APP.exportJSON();
+      }
+    });
 
     fillSettings(window.ShihaiAI.getSettings());
     buildLegend();
   }
 
-  function addChildViaUI() {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
-  }
-
   function zoomBtn(f) {
     const v = APP.view();
     const r = document.querySelector('#viewport').getBoundingClientRect();
-    // 模拟一次缩放（直接改视图）
     const ns = Math.min(2.5, Math.max(0.05, v.s * f));
     const k = ns / v.s;
     v.x = r.width / 2 - (r.width / 2 - v.x) * k;
@@ -136,17 +162,7 @@
   }
 
   function ctx() {
-    // ShihaiApp 本身就是 ctx
-    return {
-      getNodes: APP.getNodes,
-      getRootId: APP.getRootId,
-      getSelId: APP.getSelId,
-      getSelected: APP.getSelected,
-      getPath: APP.getPath,
-      addChildrenTo: APP.addChildrenTo,
-      toast: APP.toast,
-      render: APP.render
-    };
+    return APP; // ShihaiApp 即完整 ctx（含 findNode / 历史 / 快照 API）
   }
 
   /* ---------------- 选中节点 → 信息面板 ---------------- */
@@ -154,8 +170,7 @@
     if (!node) return;
     $('#info-text').value = node.text;
     $('#info-note').value = node.note;
-    const sel = $('#info-color');
-    sel.value = node.color;
+    $('#info-color').value = node.color;
     $('#info-id').textContent = 'ID: ' + node.id + (node.link ? '　🔗 联想 → ' + node.link : '');
     $('#info-panel').style.display = 'block';
   }
@@ -169,6 +184,7 @@
   function closeModal() {
     $('#modal-mask').classList.remove('show');
     $('#settings-modal').classList.remove('show');
+    $('#history-modal').classList.remove('show');
   }
   function fillSettings(s) {
     $('#set-url').value = s.baseUrl || '';
@@ -177,17 +193,94 @@
     $('#set-temp').value = s.temperature != null ? s.temperature : 0.7;
   }
 
-  /* ---------------- AI 对话 ---------------- */
+  /* ---------------- 历史面板 ---------------- */
+  function refreshHistPanel() {
+    const info = APP.histInfo();
+    const snaps = APP.listSnapshots();
+    const fmt = (t) => new Date(t).toLocaleString('zh-CN', { hour12: false });
+
+    const undoBox = $('#hist-undo');
+    undoBox.innerHTML = info.undo.length ? '' : '<div class="hist-empty">暂无可回滚的操作记录</div>';
+    // 最新在上
+    [...info.undo].reverse().forEach((h) => {
+      const div = document.createElement('div');
+      div.className = 'hist-item';
+      div.innerHTML =
+        `<span class="hist-label">${esc(h.label)}</span>` +
+        `<span class="hist-time">${fmt(h.time)}</span>` +
+        `<button class="btn mini hist-restore" data-i="${h.i}">回滚到此</button>`;
+      div.querySelector('.hist-restore').onclick = () => {
+        APP.restoreUndoAt(h.i);
+        refreshHistPanel();
+      };
+      undoBox.appendChild(div);
+    });
+
+    const snapBox = $('#hist-snaps');
+    snapBox.innerHTML = snaps.length ? '' : '<div class="hist-empty">暂无命名快照 —— 点上方「📌 保存当前为快照」创建</div>';
+    snaps.forEach((s) => {
+      const div = document.createElement('div');
+      div.className = 'hist-item';
+      div.innerHTML =
+        `<span class="hist-label">📌 ${esc(s.name)} <em>(${s.count} 节点)</em></span>` +
+        `<span class="hist-time">${fmt(s.time)}</span>` +
+        `<button class="btn mini hist-restore">恢复</button>` +
+        `<button class="btn mini hist-del">删除</button>`;
+      div.querySelector('.hist-restore').onclick = () => {
+        APP.restoreSnapshot(s.id);
+        refreshHistPanel();
+      };
+      div.querySelector('.hist-del').onclick = () => {
+        APP.deleteSnapshot(s.id);
+        refreshHistPanel();
+      };
+      snapBox.appendChild(div);
+    });
+    $('#hist-count').textContent =
+      `撤销栈 ${info.undo.length} 步 · 重做栈 ${info.redo.length} 步 · 快照 ${snaps.length} 个`;
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  /* ---------------- AI 对话：支持操控图谱 ---------------- */
   async function sendChat() {
     const input = $('#ai-input');
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
     appendMsg('user', text);
-    const thinking = appendMsg('ai', '思考中…');
+    const thinking = appendMsg('ai', '思考中…（正在检索识海记忆索引）');
     try {
-      const reply = await window.ShihaiAI.chatOnce(text, ctx());
-      thinking.querySelector('.bubble').textContent = reply;
+      const res = await window.ShihaiAI.chatOnce(text, ctx());
+      thinking.querySelector('.bubble').textContent = res.reply;
+
+      // 记忆索引指示
+      if (res.memoryHits && res.memoryHits.length) {
+        const mem = document.createElement('div');
+        mem.className = 'mem-hits';
+        mem.innerHTML = '🗂 已调用记忆索引：' +
+          res.memoryHits.slice(0, 5).map((h) => `<span class="mem-chip" title="${esc(h.path)}">${esc(h.text)}</span>`).join('');
+        $('#ai-log').insertBefore(mem, thinking.nextSibling);
+      }
+      // 指令执行结果
+      if (res.cmdResults && res.cmdResults.length) {
+        const box = document.createElement('div');
+        box.className = 'cmd-results';
+        res.cmdResults.forEach((r) => {
+          const chip = document.createElement('div');
+          chip.className = 'cmd-chip ' + (r.ok ? 'ok' : 'fail');
+          chip.textContent = r.msg;
+          box.appendChild(chip);
+        });
+        const undoBtn = document.createElement('button');
+        undoBtn.className = 'btn mini';
+        undoBtn.textContent = '↩ 撤销这些操作';
+        undoBtn.onclick = () => { APP.undo(); refreshHistPanel(); APP.toast('已撤销 AI 的图谱操作'); };
+        box.appendChild(undoBtn);
+        $('#ai-log').appendChild(box);
+      }
     } catch (e) {
       thinking.querySelector('.bubble').textContent = '⚠ ' + e.message;
     }
