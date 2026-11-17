@@ -101,6 +101,7 @@
     $('#set-close').onclick = closeModal;
 
     /* ---------- AI 面板 ---------- */
+    buildAdvisorSelect();
     $('#ai-expand').onclick = () => {
       const id = APP.getSelId();
       if (!id) return APP.toast('请先选中要扩展的节点');
@@ -244,16 +245,62 @@
     return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   }
 
+  /* ---------------- 顾问团选择器 ---------------- */
+  function buildAdvisorSelect() {
+    const sel = $('#ai-advisor');
+    if (!sel || !window.SHIHAI_ADVISORS) return;
+    const groups = {};
+    window.SHIHAI_ADVISORS.forEach((a) => {
+      (groups[a.domain_zh] = groups[a.domain_zh] || []).push(a);
+    });
+    Object.keys(groups).forEach((dz) => {
+      const og = document.createElement('optgroup');
+      og.label = dz;
+      groups[dz].forEach((a) => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = `${a.name_zh}（${a.era}）`;
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    });
+    // 星标快捷顾问
+    const stars = ['socrates', 'confucius', 'sun-tzu', 'munger', 'kahneman', 'wang-yangming'];
+    const chipBox = $('#advisor-chips');
+    if (chipBox) {
+      stars.forEach((id) => {
+        const a = window.SHIHAI_ADVISORS.find((x) => x.id === id);
+        if (!a) return;
+        const chip = document.createElement('button');
+        chip.className = 'adv-chip';
+        chip.textContent = '⭐ ' + a.name_zh;
+        chip.title = `${a.name_zh}（${a.era}）—— 以${a.domain_zh}视角作答`;
+        chip.onclick = () => {
+          sel.value = a.id;
+          $('#ai-input').focus();
+          APP.toast('已召唤顾问：' + a.name_zh);
+        };
+        chipBox.appendChild(chip);
+      });
+    }
+  }
+
   /* ---------------- AI 对话：支持操控图谱 ---------------- */
   async function sendChat() {
     const input = $('#ai-input');
     const text = input.value.trim();
     if (!text) return;
+    const advisorSel = $('#ai-advisor');
+    const advisorId = advisorSel ? advisorSel.value : '';
     input.value = '';
-    appendMsg('user', text);
-    const thinking = appendMsg('ai', '思考中…（正在检索识海记忆索引）');
+    const advisorName = advisorId && window.SHIHAI_ADVISORS
+      ? (window.SHIHAI_ADVISORS.find((a) => a.id === advisorId) || {}).name_zh : null;
+    appendMsg('user', (advisorName ? '【' + advisorName + '】' : '') + text);
+    const thinking = appendMsg('ai', advisorName
+      ? `思考中…（${advisorName} 正在检索识海记忆索引）`
+      : '思考中…（正在检索识海记忆索引）');
     try {
-      const res = await window.ShihaiAI.chatOnce(text, ctx());
+      const res = await window.ShihaiAI.chatOnce(text, ctx(), advisorId);
       thinking.querySelector('.bubble').textContent = res.reply;
 
       // 记忆索引指示

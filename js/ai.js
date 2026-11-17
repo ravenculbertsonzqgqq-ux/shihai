@@ -258,7 +258,7 @@
      ============================================================ */
   const chatLog = [];
 
-  async function chatOnce(userText, ctx) {
+  async function chatOnce(userText, ctx, advisorId) {
     const s = getSettings();
     if (!s.apiKey) {
       if (window.ShihaiUI && window.ShihaiUI.openSettings) window.ShihaiUI.openSettings();
@@ -273,14 +273,23 @@
         root.children.map((c) => nodes[c].text).join('、');
     })();
 
-    const msgs = [{
-      role: 'system',
-      content:
-        '你是「识海」内置思考助手。识海是一张神经元风格的思维导图，也是用户的长期记忆库与思考决策系统' +
+    // 顾问团模式：代入思想家角色设定
+    const advisor = advisorId
+      ? (window.SHIHAI_ADVISORS || []).find((a) => a.id === advisorId)
+      : null;
+    const baseSystem = advisor
+      ? `你是「识海思想家顾问团」成员——${advisor.name_zh}（${advisor.era}，${advisor.domain_zh}）。\n` +
+        `你的角色设定（必须严格以这位思想家的学说、认知偏好、原理与思维方式作答）：\n${advisor.prompt}\n` +
+        `要求：用中文回答；始终保持该思想家的视角与方法论；可以适当引用其核心概念；` +
+        `如该思想家会质疑问题本身（如苏格拉底），就大胆质疑。必要时也可给出图谱指令。`
+      : '你是「识海」内置思考助手。识海是一张神经元风格的思维导图，也是用户的长期记忆库与思考决策系统' +
         '（内核公理：真实优先、概率思维、生存第一、复利与反馈、机会成本、二阶思维、约束与杠杆）。' +
         '回答要求：系统、有条理、精炼，必要时给可执行的下一步。' +
-        '优先利用【识海记忆索引】中检索到的图谱内容作答，帮助提问者；与图谱冲突时如实指出。\n\n' +
-        mapOverview + '\n\n' + CMD_SPEC
+        '优先利用【识海记忆索引】中检索到的图谱内容作答，帮助提问者；与图谱冲突时如实指出。';
+
+    const msgs = [{
+      role: 'system',
+      content: baseSystem + '\n\n' + mapOverview + '\n\n' + CMD_SPEC
     }];
     if (hits.length) msgs.push({ role: 'system', content: formatMemory(hits) });
     if (sel) {
@@ -301,7 +310,7 @@
     const cmds = extractCommands(reply);
     const cleanReply = stripCommands(reply) || '(已执行图谱操作)';
     const cmdResults = cmds.length ? executeCommands(cmds, ctx) : [];
-    return { reply: cleanReply, cmdResults, memoryHits: hits };
+    return { reply: cleanReply, cmdResults, memoryHits: hits, advisor: advisor ? advisor.name_zh : null };
   }
 
   /* ---------- 从模型输出稳健地抽出 JSON 数组（AI 扩展用） ---------- */

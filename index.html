@@ -100,8 +100,13 @@
 <!-- ═════════ 右侧：AI 面板 ═════════ -->
 <aside id="ai-panel">
   <div class="ai-head">
-    <h2>✨ AI 思考助手</h2>
-    <p>🗂 图谱即记忆：自动检索相关节点作答<br>🗣 可对话操控图谱：试试「把生存第一展开成行动清单」</p>
+    <h2>✨ AI 思考助手 · 顾问团</h2>
+    <p>🗂 图谱即记忆：自动检索相关节点作答　🗣 可对话操控图谱</p>
+    <div class="adv-row">
+      <label>👥 顾问团模式</label>
+      <select id="ai-advisor"><option value="">🧠 识海助手（默认）</option></select>
+    </div>
+    <div id="advisor-chips"></div>
     <button class="btn primary" id="ai-expand">✨ AI 扩展选中节点（生成子要点）</button>
   </div>
   <div id="ai-log">
@@ -164,6 +169,7 @@
 <!-- ═════════ 脚本 ═════════ -->
 <script src="js/data.js"></script>
 <script src="js/data-extra.js"></script>
+<script src="js/data-thinkers.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
