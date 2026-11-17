@@ -428,3 +428,106 @@ html, body {
 /* ---------- 顶栏紧凑化（容纳新按钮） ---------- */
 #topbar { gap: 6px; padding: 9px 12px; flex-wrap: nowrap; overflow-x: auto; }
 .brand h1 { font-size: 16px; }
+
+/* ============================================================
+   v4 组件：小地图雷达 / 视口虚拟化 / 路径高亮 / 圆桌 / 深度模式
+   ============================================================ */
+
+/* ---------- 小地图雷达 ---------- */
+#minimap {
+  position: fixed; top: 70px; left: 14px; z-index: 28;
+  width: 200px; height: 132px;
+  background: rgba(10, 16, 40, 0.82);
+  border: 1px solid rgba(110, 150, 255, 0.3);
+  border-radius: 12px;
+  cursor: crosshair;
+  box-shadow: 0 10px 30px rgba(0, 8, 40, 0.5);
+  opacity: 0.92; transition: opacity 0.2s;
+}
+#minimap:hover { opacity: 1; }
+
+/* ---------- 视口虚拟化 ---------- */
+#nodes .node.culled { display: none; }
+
+/* ---------- 选中路径高亮（金色链条） ---------- */
+.node.onpath {
+  border-color: rgba(245, 196, 81, 0.75);
+  box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.22), 0 0 22px rgba(245, 196, 81, 0.35);
+}
+.node.onpath.is-root {
+  box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.3), 0 0 42px rgba(245, 196, 81, 0.35);
+}
+
+/* ---------- 圆桌 / 帮助弹窗（复用设置弹窗规格） ---------- */
+#roundtable-modal, #help-modal {
+  position: fixed; z-index: 70; top: 50%; left: 50%;
+  transform: translate(-50%, -48%) scale(0.96);
+  width: 470px; max-width: 92vw; max-height: 84vh; overflow-y: auto;
+  background: rgba(15, 22, 52, 0.97); border: 1px solid rgba(110, 150, 255, 0.28);
+  border-radius: 18px; padding: 22px;
+  opacity: 0; pointer-events: none;
+  transition: all 0.25s;
+  box-shadow: 0 30px 80px rgba(0, 4, 24, 0.7);
+}
+#roundtable-modal.show, #help-modal.show {
+  opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1);
+}
+#roundtable-modal h2, #help-modal h2 { font-size: 16px; letter-spacing: 1px; margin-bottom: 4px; }
+#roundtable-modal .sub { font-size: 11px; color: var(--dim); margin-bottom: 14px; line-height: 1.6; }
+.rt-grid { display: flex; gap: 8px; }
+.rt-grid select {
+  flex: 1; min-width: 0; padding: 8px 9px; border-radius: 9px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05);
+  color: var(--text); font-size: 11.5px; outline: none;
+}
+.rt-grid select:focus { border-color: var(--accent); }
+#rt-question {
+  width: 100%; padding: 9px 11px; border-radius: 9px; resize: vertical;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05);
+  color: var(--text); font-size: 12.5px; outline: none; font-family: inherit;
+}
+#rt-question:focus { border-color: var(--accent); }
+.help-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 7px 14px;
+  font-size: 11.5px; color: var(--text); margin: 12px 0 4px;
+}
+.help-grid b { color: var(--accent); font-weight: 600; margin-right: 4px; }
+
+/* ---------- 深度模式 ---------- */
+.deep-wrap {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 10.5px; color: var(--dim); cursor: pointer; user-select: none;
+  white-space: nowrap; padding: 4px 6px; border-radius: 8px;
+  border: 1px solid transparent; transition: all 0.15s;
+}
+.deep-wrap:hover { color: var(--text); border-color: var(--line); }
+.deep-wrap input { accent-color: var(--accent); cursor: pointer; }
+.deep-wrap:has(input:checked) {
+  color: var(--accent); border-color: rgba(110, 168, 255, 0.5);
+  background: rgba(110, 168, 255, 0.1);
+}
+.ai-tip {
+  font-size: 10px; color: var(--dim); margin-top: 5px; line-height: 1.5;
+}
+details.deep-d, details.deep-c {
+  margin: 4px 0 8px; padding: 6px 10px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line);
+  font-size: 11px;
+}
+details.deep-d summary, details.deep-c summary {
+  cursor: pointer; color: var(--dim); font-size: 10.5px; user-select: none;
+}
+details.deep-d[open] summary, details.deep-c[open] summary { color: var(--text); margin-bottom: 5px; }
+.deep-body { color: var(--dim); line-height: 1.65; font-size: 11px; white-space: pre-wrap; }
+.deep-final { white-space: pre-wrap; }
+
+/* ---------- 圆桌气泡 ---------- */
+.rt-panel {
+  border-left: 2px solid rgba(245, 196, 81, 0.55);
+  background: rgba(245, 196, 81, 0.06);
+}
+.rt-synth {
+  border-left: 2px solid var(--accent);
+  background: rgba(110, 168, 255, 0.1);
+}
+.rt-name { color: var(--gold); font-size: 11.5px; letter-spacing: 1px; }

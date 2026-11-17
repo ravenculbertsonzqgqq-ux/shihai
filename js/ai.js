@@ -371,8 +371,80 @@
     }
   }
 
+  /* ============================================================
+     圆桌会议：多 Agent 并行+合并（辩论模式）
+     ============================================================ */
+  async function roundtable(question, advisorIds, ctx) {
+    const s = getSettings();
+    if (!s.apiKey) throw new Error('未配置 API Key');
+    const hits = retrieveContext(question, ctx, 6);
+    const mem = formatMemory(hits);
+    const advisors = advisorIds
+      .map((id) => (window.SHIHAI_ADVISORS || []).find((a) => a.id === id))
+      .filter(Boolean);
+    const panels = await Promise.all(advisors.map(async (a) => {
+      const msgs = [
+        {
+          role: 'system',
+          content:
+            `你是「识海思想家顾问团」圆桌成员——${a.name_zh}（${a.era}，${a.domain_zh}）。\n` +
+            `角色设定：${a.prompt}\n` +
+            '要求：用中文以该思想家的学说视角简明作答（150 字以内），直陈观点、可与其他观点交锋。'
+        },
+        ...(mem ? [{ role: 'system', content: mem }] : []),
+        { role: 'user', content: question }
+      ];
+      try {
+        const reply = await callChat(msgs, { temperature: 0.8, maxTokens: 500 });
+        return { name: a.name_zh, era: a.era, reply: (reply || '').trim() };
+      } catch (e) {
+        return { name: a.name_zh, era: a.era, reply: '（该顾问应答失败：' + e.message + '）' };
+      }
+    }));
+    let synthesis = '';
+    try {
+      synthesis = (await callChat([
+        {
+          role: 'system',
+          content: '你是圆桌主持人。综合各位思想家观点：① 提炼共识 ② 点明分歧 ③ 给出可执行结论。中文，条理清晰，200 字以内。'
+        },
+        {
+          role: 'user',
+          content: '议题：' + question + '\n\n' + panels.map((p) => `【${p.name}】${p.reply}`).join('\n\n')
+        }
+      ], { temperature: 0.5, maxTokens: 700 })).trim();
+    } catch (e) {
+      synthesis = '（综合失败：' + e.message + '）';
+    }
+    return { panels, synthesis, memoryHits: hits };
+  }
+
+  /* ============================================================
+     深度反思（Reflexion）：初稿 → 批评 → 修订
+     ============================================================ */
+  async function critique(question, draft, ctx) {
+    return (await callChat([
+      {
+        role: 'system',
+        content: '你是苛刻的评审。指出回答的 3 个具体不足（事实/逻辑/可执行性），每条一句话，只输出不足清单。'
+      },
+      { role: 'user', content: '问题：' + question + '\n\n回答初稿：' + draft }
+    ], { temperature: 0.5, maxTokens: 400 })).trim();
+  }
+
+  async function revise(question, draft, crit, ctx) {
+    return (await callChat([
+      {
+        role: 'system',
+        content: '根据批评意见修订回答，输出最终版（中文，保留优点，补足缺陷，条理清晰）。只输出修订后的回答。'
+      },
+      { role: 'user', content: '问题：' + question + '\n\n初稿：' + draft + '\n\n批评意见：' + crit }
+    ], { temperature: 0.5, maxTokens: 900 })).trim();
+  }
+
   window.ShihaiAI = {
     getSettings, saveSettings, callChat, expandNode, chatOnce,
-    retrieveContext, extractCommands, executeCommands, DEFAULTS
+    retrieveContext, extractCommands, executeCommands,
+    roundtable, critique, revise, DEFAULTS
   };
 })();

@@ -53,6 +53,10 @@
     <button class="btn" id="btn-import" title="导入 JSON">⬆</button>
     <input type="file" id="file-import" accept=".json,application/json" hidden>
     <button class="btn" id="btn-reset" title="重置为默认图谱">↺</button>
+    <button class="btn" id="btn-collapse-all" title="折叠全部（保留前两层）">🪗</button>
+    <button class="btn" id="btn-expand-all" title="展开全部">🧺</button>
+    <button class="btn" id="btn-roundtable" title="圆桌会议：多思想家并行会诊">🪑</button>
+    <button class="btn" id="btn-help" title="帮助与快捷键 (?)">❔</button>
     <button class="btn" id="btn-settings" title="配置 AI 模型 API">⚙</button>
     <button class="btn primary" id="btn-ai" title="打开 AI 面板（可对话操控图谱）">✨ AI</button>
   </div>
@@ -65,6 +69,9 @@
     <div id="nodes"></div>
   </div>
 </main>
+
+<!-- ═════════ 小地图雷达（v4） ═════════ -->
+<canvas id="minimap" width="200" height="132" title="小地图：点击/拖拽快速定位"></canvas>
 
 <!-- ═════════ 左下：节点信息 ═════════ -->
 <aside id="info-panel">
@@ -120,8 +127,10 @@
   </div>
   <div class="ai-input-row">
     <textarea id="ai-input" placeholder="提问或指挥我改图…（Enter 发送）"></textarea>
+    <label class="deep-wrap" title="深度反思：初稿→批评→修订（Reflexion 三轮）"><input type="checkbox" id="deep-toggle">🔬深度</label>
     <button class="btn primary" id="ai-send">发送</button>
   </div>
+  <div class="ai-tip">回车发送 · shihai 指令自动改图 · 🔬深度=三轮反思 · 🪑圆桌=多顾问会诊</div>
 </aside>
 
 <!-- ═════════ 图例 / 提示 ═════════ -->
@@ -166,12 +175,50 @@
   </div>
 </div>
 
+<!-- ═════════ 圆桌会议弹窗（v4） ═════════ -->
+<div id="roundtable-modal">
+  <h2>🪑 圆桌会议 · 多思想家会诊</h2>
+  <div class="sub">选择 2-3 位思想家（可留空一位），各自以学说视角并行应答同一议题，主持人提炼共识 / 分歧 / 结论。范式：并行+合并（Coordinator），回答质量显著提升。</div>
+  <div class="rt-grid">
+    <select id="rt-advisor-1"></select>
+    <select id="rt-advisor-2"></select>
+    <select id="rt-advisor-3"></select>
+  </div>
+  <label style="display:block;font-size:11.5px;color:var(--dim);margin:12px 0 5px;">圆桌议题</label>
+  <textarea id="rt-question" rows="3" placeholder="例如：如何为一场关键谈判做准备？"></textarea>
+  <div class="modal-row">
+    <button class="btn" id="rt-close">取消</button>
+    <button class="btn primary" id="rt-run">开始圆桌 ⚡</button>
+  </div>
+</div>
+
+<!-- ═════════ 帮助弹窗（v4） ═════════ -->
+<div id="help-modal">
+  <h2>❔ 帮助 · 快捷键</h2>
+  <div class="help-grid">
+    <div><b>拖拽画布</b> 平移</div><div><b>滚轮</b> 缩放（指向光标）</div>
+    <div><b>拖拽节点</b> 移动（自动重连线）</div><div><b>右键节点</b> 选中查看</div>
+    <div><b>Tab</b> 加子节点</div><div><b>Enter</b> 加同级</div>
+    <div><b>Del</b> 删除</div><div><b>F2</b> 重命名</div>
+    <div><b>Ctrl+K</b> 命令面板（搜索跳转）</div><div><b>Ctrl+Z / Y</b> 撤销 / 重做</div>
+    <div><b>0</b> 全览</div><div><b>?</b> 本帮助</div>
+    <div><b>🪗 / 🧺</b> 折叠（保留两层）/ 全部展开</div><div><b>🪑</b> 圆桌会议</div>
+    <div><b>🔬 深度</b> 初稿→批评→修订</div><div><b>🕐 历史</b> 快照对比与回滚</div>
+    <div><b>✨ AI</b> 对话操控图谱</div><div><b>左上小地图</b> 点击/拖拽定位</div>
+  </div>
+  <div class="modal-row">
+    <button class="btn primary" id="help-close">知道了</button>
+  </div>
+</div>
+
 <!-- ═════════ 脚本 ═════════ -->
 <script src="js/data.js"></script>
 <script src="js/data-extra.js"></script>
 <script src="js/data-thinkers.js"></script>
+<script src="js/data-ai.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
+<script src="js/upgrades.js"></script>
 </body>
 </html>
