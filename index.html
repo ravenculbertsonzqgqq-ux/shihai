@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>识海 · 无限画布思维导图</title>
+<meta name="description" content="识海 —— 神经元风格无限画布思维导图：集成北极星思考决策系统与古今中外人类智慧结晶，自由编辑，AI 扩展。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='50%25' cy='40%25'%3E%3Cstop offset='0' stop-color='%236ea8ff'/%3E%3Cstop offset='1' stop-color='%237c4dff'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ccircle cx='22' cy='26' r='7' fill='none' stroke='%23fff' stroke-width='3'/%3E%3Ccircle cx='44' cy='20' r='5' fill='none' stroke='%23fff' stroke-width='3'/%3E%3Ccircle cx='40' cy='44' r='6' fill='none' stroke='%23fff' stroke-width='3'/%3E%3Cpath d='M28 25 L39 21 M27 32 L36 40' stroke='%23fff' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═════════ 顶栏 ═════════ -->
+<header id="topbar">
+  <div class="brand">
+    <div class="logo"></div>
+    <div>
+      <h1>识海</h1>
+      <small>无限画布 · 神经元思维决策系统</small>
+    </div>
+  </div>
+  <div class="tb-group">
+    <button class="btn" id="btn-add-child" title="加子节点 (Tab)">＋ 子节点</button>
+    <button class="btn" id="btn-add-sib" title="加同级 (Enter)">＋＋ 同级</button>
+    <button class="btn" id="btn-edit" title="编辑 (F2)">✎ 编辑</button>
+    <button class="btn" id="btn-del" title="删除 (Del)">✕ 删除</button>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <button class="btn" id="btn-layout" title="自动整理为整齐树状布局">✦ 整理布局</button>
+    <button class="btn" id="btn-fit" title="缩放至全部可见 (0)">⛶ 适应视图</button>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <input id="search" placeholder="搜索节点… (Enter 跳转)">
+    <span id="search-count"></span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <button class="btn" id="zoom-out" title="缩小 (-)">−</button>
+    <span id="zoom-label">100%</span>
+    <button class="btn" id="zoom-in" title="放大 (+)">＋</button>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-group">
+    <button class="btn" id="btn-export" title="导出 JSON">⬇ 导出</button>
+    <button class="btn" id="btn-import" title="导入 JSON">⬆ 导入</button>
+    <input type="file" id="file-import" accept=".json,application/json" hidden>
+    <button class="btn" id="btn-reset" title="重置为默认图谱">↺ 重置</button>
+    <button class="btn" id="btn-settings" title="配置 AI 模型 API">⚙ AI 设置</button>
+    <button class="btn primary" id="btn-ai" title="打开 AI 面板">✨ AI 面板</button>
+  </div>
+</header>
+
+<!-- ═════════ 无限画布 ═════════ -->
+<main id="viewport">
+  <div id="world">
+    <svg id="edges"><g id="edge-g"></g></svg>
+    <div id="nodes"></div>
+  </div>
+</main>
+
+<!-- ═════════ 左下：节点信息 ═════════ -->
+<aside id="info-panel">
+  <h3>节点编辑</h3>
+  <label>标题</label>
+  <input id="info-text" type="text">
+  <label>说明（悬停小蓝点可见）</label>
+  <textarea id="info-note"></textarea>
+  <label>分类颜色</label>
+  <select id="info-color">
+    <option value="axiom">公理</option>
+    <option value="cog">认知</option>
+    <option value="value">价值</option>
+    <option value="decide">决策</option>
+    <option value="solve">解题</option>
+    <option value="exec">执行</option>
+    <option value="review">复盘</option>
+    <option value="model">模型</option>
+    <option value="scene">场景</option>
+    <option value="anti">反模式</option>
+    <option value="life">日常</option>
+    <option value="method">思维法</option>
+    <option value="war">兵书</option>
+    <option value="east">东方</option>
+    <option value="west">西方</option>
+    <option value="book">典籍</option>
+    <option value="root">根</option>
+  </select>
+  <div id="info-id"></div>
+  <button class="btn primary" id="info-save">保存节点</button>
+</aside>
+
+<!-- ═════════ 右侧：AI 面板 ═════════ -->
+<aside id="ai-panel">
+  <div class="ai-head">
+    <h2>✨ AI 思考助手</h2>
+    <p>选中节点后可一键 AI 扩展子要点；对话自动携带节点上下文</p>
+    <button class="btn primary" id="ai-expand">✨ AI 扩展选中节点（生成子要点）</button>
+  </div>
+  <div id="ai-log">
+    <div class="msg ai"><div class="bubble">你好，我是识海思考助手。选中任意节点（如「公理3 生存第一」），点上方按钮让我自动扩展要点，或直接向我提问。</div></div>
+  </div>
+  <div class="ai-input-row">
+    <textarea id="ai-input" placeholder="向 AI 提问…（Enter 发送）"></textarea>
+    <button class="btn primary" id="ai-send">发送</button>
+  </div>
+</aside>
+
+<!-- ═════════ 图例 / 提示 ═════════ -->
+<div id="legend"></div>
+<div id="toast"></div>
+
+<!-- ═════════ AI 设置弹窗 ═════════ -->
+<div id="modal-mask"></div>
+<div id="settings-modal">
+  <h2>⚙ AI 模型配置</h2>
+  <div class="sub">兼容 OpenAI 接口格式（/v1/chat/completions）。可自定义任意服务商的 Base URL、模型名与 Key。配置仅保存在你本地浏览器。</div>
+  <label>API Base URL</label>
+  <input id="set-url" type="text" placeholder="https://apihub.agnes-ai.com/v1">
+  <label>模型名称</label>
+  <input id="set-model" type="text" placeholder="agnes-2.5-flash">
+  <label>API Key</label>
+  <input id="set-key" type="password" placeholder="sk-...">
+  <label>温度（0–2，越高越发散）</label>
+  <input id="set-temp" type="number" step="0.1" min="0" max="2" placeholder="0.7">
+  <div class="hint">⚠️ 公开网页中的默认 Key 会暴露给所有访问者，建议使用限额 Key 或在部署后更换为自己申请的专用 Key。</div>
+  <div class="modal-row">
+    <button class="btn" id="set-default">恢复默认</button>
+    <button class="btn" id="set-close">取消</button>
+    <button class="btn primary" id="set-save">保存</button>
+  </div>
+</div>
+
+<!-- ═════════ 脚本 ═════════ -->
+<script src="js/data.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
